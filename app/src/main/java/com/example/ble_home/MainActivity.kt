@@ -4,7 +4,9 @@ import android.Manifest
 import android.bluetooth.*
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -21,6 +23,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import io.objectbox.BoxStore
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
@@ -40,6 +43,10 @@ class MainActivity : AppCompatActivity() {
 
     private var bluetoothGatt: BluetoothGatt? = null
     private lateinit var tvData: TextView
+    private lateinit var tvStatus: TextView // TextView для отображения статуса
+    private lateinit var btnSend: Button
+
+    lateinit var boxStore: BoxStore
 
     private val SERVICE_UUID = UUID.fromString("4fafc201-1fb5-459e-8fcc-c5c9c331914b")
     private val CHARACTERISTIC_UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26a8")
@@ -48,13 +55,32 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        boxStore = MyObjectBox.builder()
+            .androidContext(this)
+            .build()
+
+        val roomBox = boxStore.boxFor(Room::class.java)
+
+// Создаем объект Room
+        val room = Room(name = "Living Room", temperature = 22.5f, humidity = 45.0f)
+
+        val rooms = roomBox.all
+        rooms.forEach { room ->
+            Log.d("RoomInfo", "Room: ${room.name}, Temp: ${room.temperature}°C")
+        }
+
+
         // Инициализация UI
         val btnScan: Button = findViewById(R.id.btnScan)
         listDevices = findViewById(R.id.listDevices)
         tvData = findViewById(R.id.tvData)
+        tvStatus = findViewById(R.id.tvStatus) // Инициализация TextView для статуса
+        btnSend = findViewById(R.id.btnSend)
 
         deviceListAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
         listDevices.adapter = deviceListAdapter
+
+        btnSend.setOnClickListener { sendMessage() }
 
         // Проверка поддержки BLE
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -89,14 +115,13 @@ class MainActivity : AppCompatActivity() {
             val device = devices[position]
             connectToDevice(device)
         }
+
+        val intent = Intent(this, MainActivity2::class.java)
+        startActivity(intent)
     }
 
     private fun checkPermissions() {
         val permissionsNeeded = mutableListOf<String>()
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
@@ -104,6 +129,10 @@ class MainActivity : AppCompatActivity() {
             }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 permissionsNeeded.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
         }
 
@@ -113,25 +142,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startScan() {
-        Log.d("BLE", "Attempting to start scan")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                Log.e("BLE", "BLUETOOTH_SCAN permission not granted")
-                return
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            Log.e("BLE", "BLUETOOTH_SCAN permission not granted")
+            return
         }
 
-        try {
-            bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
-            bluetoothLeScanner.startScan(scanCallback)
-            scanning = true
-            Log.d("BLE", "Scanning started")
+        bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
+        val scanSettings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
 
-            // Остановка сканирования через SCAN_PERIOD
-            handler.postDelayed({ stopScan() }, SCAN_PERIOD)
-        } catch (e: SecurityException) {
-            Log.e("BLE", "SecurityException: ${e.message}")
-        }
+        val scanFilter = ScanFilter.Builder().build()
+        val scanFilters = listOf(scanFilter)
+
+        bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
+        scanning = true
+        Log.d("BLE", "Scanning started")
+
+        handler.postDelayed({ stopScan() }, SCAN_PERIOD)
     }
 
     private fun stopScan() {
@@ -159,17 +188,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSIONS_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                Log.d("BLE", "All permissions granted")
+                startScan()
+            } else {
+                Log.e("BLE", "Permissions denied")
+                Toast.makeText(this, "Permissions are required for Bluetooth scanning", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun connectToDevice(device: BluetoothDevice) {
         bluetoothGatt = device.connectGatt(this, false, gattCallback)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                runOnUiThread { Toast.makeText(this@MainActivity, "Connected", Toast.LENGTH_SHORT).show() }
-                bluetoothGatt?.discoverServices()
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                runOnUiThread { Toast.makeText(this@MainActivity, "Disconnected", Toast.LENGTH_SHORT).show() }
+            super.onConnectionStateChange(gatt, status, newState)
+            runOnUiThread {
+                when (newState) {
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        tvStatus.text = "Status: Connected"
+                        Toast.makeText(this@MainActivity, "Connected", Toast.LENGTH_SHORT).show()
+                        bluetoothGatt?.discoverServices()
+                    }
+                    BluetoothProfile.STATE_DISCONNECTED -> {
+                        tvStatus.text = "Status: Disconnected"
+                        Toast.makeText(this@MainActivity, "Disconnected", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
 
@@ -191,6 +241,25 @@ class MainActivity : AppCompatActivity() {
                 val data = characteristic.value.toString(Charsets.UTF_8)
                 runOnUiThread { tvData.text = "Received Data: $data" }
             }
+        }
+    }
+
+    private fun sendMessage() {
+        if (bluetoothGatt == null) {
+            Toast.makeText(this, "Not connected!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val service = bluetoothGatt?.getService(SERVICE_UUID)
+        val characteristic = service?.getCharacteristic(CHARACTERISTIC_UUID)
+
+        if (characteristic != null) {
+            val message = "Hello from Android!".toByteArray(Charsets.UTF_8)
+            characteristic.value = message
+            bluetoothGatt?.writeCharacteristic(characteristic)
+            Toast.makeText(this, "Message sent!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Characteristic not found!", Toast.LENGTH_SHORT).show()
         }
     }
 
