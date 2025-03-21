@@ -19,7 +19,7 @@ class RoomFragment : Fragment() {
 
         // Получаем RecyclerView из макета
         val recyclerView: RecyclerView = view.findViewById(R.id.recycler_view)
-        Toast.makeText(context, "This is a toast message", Toast.LENGTH_SHORT).show()
+
         // Устанавливаем GridLayoutManager с 2 столбцами
         recyclerView.layoutManager = GridLayoutManager(requireContext(), 2)
 

@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView // TextView для отображения статуса
     private lateinit var btnSend: Button
 
-    lateinit var boxStore: BoxStore
+    //lateinit var boxStore: BoxStore
 
     private val SERVICE_UUID = UUID.fromString("4fafc201-1fb5-459e-8fcc-c5c9c331914b")
     private val CHARACTERISTIC_UUID = UUID.fromString("beb5483e-36e1-4688-b7f5-ea07361b26a8")
@@ -54,21 +54,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        boxStore = MyObjectBox.builder()
-            .androidContext(this)
-            .build()
-
-        val roomBox = boxStore.boxFor(Room::class.java)
-
-// Создаем объект Room
-        val room = Room(name = "Living Room", temperature = 22.5f, humidity = 45.0f)
-
-        val rooms = roomBox.all
-        rooms.forEach { room ->
-            Log.d("RoomInfo", "Room: ${room.name}, Temp: ${room.temperature}°C")
-        }
-
 
         // Инициализация UI
         val btnScan: Button = findViewById(R.id.btnScan)
