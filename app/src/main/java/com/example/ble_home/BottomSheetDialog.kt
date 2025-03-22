@@ -24,16 +24,18 @@ class BottomSheetDialog : BottomSheetDialogFragment() {
         val create_room_button = v.findViewById<Button>(R.id.create_room)
 
         connect_devices_button.setOnClickListener {
-
-
+            // Показываем Toast
             Toast.makeText(
                 activity,
                 "First Button Clicked", Toast.LENGTH_SHORT
             ).show()
-            dismiss()
 
+            // Запускаем новую активность
             val intent = Intent(requireActivity(), MainActivity::class.java)
             startActivity(intent)
+
+            // Закрываем BottomSheet
+            dismiss()
         }
 
         create_room_button.setOnClickListener {

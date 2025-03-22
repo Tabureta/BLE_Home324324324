@@ -101,8 +101,6 @@ class MainActivity : AppCompatActivity() {
             connectToDevice(device)
         }
 
-        val intent = Intent(this, MainActivity2::class.java)
-        startActivity(intent)
     }
 
     private fun checkPermissions() {

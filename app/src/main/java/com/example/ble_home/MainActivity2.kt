@@ -1,5 +1,6 @@
 package com.example.ble_home
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -38,6 +39,7 @@ class MainActivity2 : AppCompatActivity() {
         rooms.forEach { room ->
             fragments.add(RoomFragment())
         }
+
 
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar) // Устанавливаем Toolbar как ActionBar
@@ -79,5 +81,9 @@ class MainActivity2 : AppCompatActivity() {
         rooms.forEach { room ->
             Log.d("RoomInfo", "Room: ${room.name}, Temp: ${room.temperature}°C")
         }
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        boxStore.close()
     }
 }
